@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solicitar requerimiento — HME</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --teal:#2dd6c4; --teal-dark:#17b3a0; --teal-light:#e6fbf8;
+    --black:#0b0d0d; --black2:#181b1b; --ink:#0f2b2a; --gray:#6b7a79; --bg:#f4fbfa; --card:#ffffff;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  header{
+    background:linear-gradient(90deg,var(--black),var(--black2));
+    color:var(--teal);padding:16px 24px;box-shadow:0 2px 10px rgba(0,0,0,.3);
+  }
+  header h1{font-size:19px;margin:0;font-weight:600;}
+  header small{display:block;font-weight:400;opacity:.8;font-size:12px;color:#bfeee8;margin-top:2px;}
+  main{max-width:640px;margin:28px auto;padding:0 16px;}
+  .card{background:var(--card);border-radius:14px;padding:26px 26px;box-shadow:0 3px 14px rgba(20,80,75,.08);}
+  .card h2{margin-top:0;color:var(--teal-dark);font-size:17px;border-bottom:2px solid var(--teal-light);padding-bottom:8px;}
+  label{font-size:13px;font-weight:600;color:var(--gray);display:block;margin-bottom:5px;margin-top:14px;}
+  input,select,textarea{
+    width:100%;padding:10px 12px;border:1.5px solid #d8ece9;border-radius:8px;font-size:14px;
+    font-family:inherit;background:#fbfffe;
+  }
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-light);}
+  textarea{resize:vertical;min-height:80px;}
+  .radiogroup{display:flex;gap:10px;flex-wrap:wrap;}
+  .radiogroup label{
+    display:flex;align-items:center;gap:6px;border:1.5px solid #d8ece9;padding:8px 14px;border-radius:20px;
+    cursor:pointer;font-weight:500;color:var(--ink);font-size:13px;margin-top:0;
+  }
+  .radiogroup input{width:auto;}
+  button.primary{
+    background:linear-gradient(90deg,var(--teal-dark),var(--teal));color:#02201c;border:none;
+    padding:13px 22px;border-radius:8px;font-size:15px;cursor:pointer;font-weight:700;
+    box-shadow:0 3px 10px rgba(45,214,196,.35);width:100%;margin-top:20px;
+  }
+  button.primary:hover{filter:brightness(1.05);}
+  button.primary:disabled{opacity:.6;cursor:not-allowed;}
+  .msg{margin-top:16px;padding:12px 14px;border-radius:8px;font-size:13.5px;display:none;}
+  .msg.ok{display:block;background:#e9fbf3;color:#1c8a5f;border:1px solid #bdeed7;}
+  .msg.err{display:block;background:#fdecec;color:#b23a3a;border:1px solid #f3c6c6;}
+  .foliook{font-weight:700;}
+  footer{text-align:center;color:var(--gray);font-size:12px;padding:20px;}
+</style>
+</head>
+<body>
+
+<header style="display:flex;justify-content:center;padding:22px 24px;">
+  <img src="logo.png" alt="Hub de Mejora Estratégica" style="height:90px;">
+</header>
+
+<main>
+  <div class="card">
+    <h2>Cuéntanos qué necesitas</h2>
+    <form id="form">
+      <label>Importancia</label>
+      <div class="radiogroup">
+        <label><input type="radio" name="importancia" value="Alta" required> Alta</label>
+        <label><input type="radio" name="importancia" value="Media"> Media</label>
+        <label><input type="radio" name="importancia" value="Baja"> Baja</label>
+      </div>
+
+      <label>Tu nombre</label>
+      <input type="text" id="solicitante" placeholder="Nombre completo" required>
+
+      <label>Área destino</label>
+      <select id="area" required>
+        <option value="">Selecciona…</option>
+        <option>Sears</option>
+        <option>Sanborns</option>
+        <option>Dax</option>
+        <option>Incidencias</option>
+        <option>Replenishment</option>
+      </select>
+
+      <label>Tu correo</label>
+      <input type="email" id="correo" placeholder="nombre@empresa.com" required>
+
+      <label>Fecha compromiso / entrega deseada (opcional)</label>
+      <input type="date" id="fechaCompromiso">
+
+      <label>Descripción del requerimiento</label>
+      <textarea id="descripcion" placeholder="Describe a detalle lo que necesitas…" required></textarea>
+
+      <label>Impacto esperado / justificación (opcional)</label>
+      <textarea id="impacto" placeholder="¿Qué mejora, ahorro o riesgo mitiga este requerimiento?"></textarea>
+
+      <button type="submit" class="primary" id="submitBtn">Enviar requerimiento</button>
+      <div class="msg" id="msgBox"></div>
+    </form>
+  </div>
+</main>
+
+<footer>Este formulario no requiere cuenta. Tu solicitud será revisada por el equipo HME.</footer>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, doc, setDoc, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyALKp_d_G8HurlJvJURHH-5sL2VbwP0nz0",
+  authDomain: "hme-portal.firebaseapp.com",
+  projectId: "hme-portal",
+  storageBucket: "hme-portal.firebasestorage.app",
+  messagingSenderId: "123943995621",
+  appId: "1:123943995621:web:2e4a82b968c71864356c0c"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const CONSEC_REF = doc(db, "meta", "consecutivo");
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtFechaHora(d){ return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+
+async function nextFolio(){
+  return await runTransaction(db, async (tx)=>{
+    const snap = await tx.get(CONSEC_REF);
+    const current = snap.exists() ? snap.data().n : 0;
+    const next = current + 1;
+    tx.set(CONSEC_REF, { n: next });
+    return { n: next, folio: 'HME-'+String(next).padStart(4,'0') };
+  });
+}
+
+document.getElementById('form').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const msgBox = document.getElementById('msgBox');
+  msgBox.className = 'msg';
+  btn.disabled = true; btn.textContent = 'Enviando…';
+
+  try{
+    const now = new Date();
+    const base = {
+      importancia: document.querySelector('input[name=importancia]:checked')?.value,
+      solicitante: document.getElementById('solicitante').value.trim(),
+      area: document.getElementById('area').value,
+      correo: document.getElementById('correo').value.trim(),
+      fechaCompromiso: document.getElementById('fechaCompromiso').value,
+      descripcion: document.getElementById('descripcion').value.trim(),
+      impacto: document.getElementById('impacto').value.trim(),
+    };
+    if(!base.importancia){ throw new Error('Selecciona una importancia'); }
+
+    const {n, folio} = await nextFolio();
+    const registro = Object.assign({
+      folio, consecutivo:n, tipo:'Nuevo', origen:'externo',
+      fechaRegistro: now.toISOString(), fechaRegistroTexto: fmtFechaHora(now),
+      estatus:'Abierto', avances:[],
+      historialCambios:[{fecha: fmtFechaHora(now), texto:'Solicitud enviada desde el formulario público por '+base.solicitante+'.'}]
+    }, base);
+
+    await setDoc(doc(db,"requerimientos",folio), registro);
+
+    msgBox.classList.add('ok');
+    msgBox.innerHTML = 'Tu solicitud fue enviada con el folio <span class="foliook">'+folio+'</span>. El equipo HME la revisará pronto.';
+    this.reset();
+  } catch(err){
+    msgBox.classList.add('err');
+    msgBox.textContent = 'No se pudo enviar: ' + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enviar requerimiento';
+  }
+});
+</script>
+</body>
+</html>
